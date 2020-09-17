@@ -1,11 +1,15 @@
-from flask import redirect
+import logging
+
 from flask_restful import Resource
-from flask_restful import reqparse
 from flask_restful import fields, marshal_with, marshal
-from bigsi_aggregator.helpers import BigsiAggregator
-from bigsi_aggregator.settings import BIGSI_URLS
-from bigsi_aggregator.models import SequenceSearch
+from flask_restful import reqparse
+
 from bigsi_aggregator import constants
+from bigsi_aggregator.helpers import BigsiAggregator
+from bigsi_aggregator.models import SequenceSearch
+from bigsi_aggregator.settings import BIGSI_URLS
+
+logger = logging.getLogger(__name__)
 
 parser = reqparse.RequestParser()
 parser.add_argument("seq", type=str, help="The sequence query")
@@ -51,6 +55,10 @@ search_fields = {
 class SequenceSearchListResource(Resource):
     def post(self):
         args = parser.parse_args()
+
+        logger.info(self.post.__name__)
+        logger.debug('args: %s', args)
+
         sequence_search = SequenceSearch.create(
             **args, total_bigsi_queries=len(BIGSI_URLS)
         )
@@ -62,4 +70,7 @@ class SequenceSearchListResource(Resource):
 class SequenceSearchResource(Resource):
     @marshal_with(search_fields)
     def get(self, sequence_search_id):
+        logger.info(self.get.__name__)
+        logger.debug('sequence_search_id: %s', sequence_search_id)
+
         return SequenceSearch.get_by_id(sequence_search_id)
