@@ -18,7 +18,6 @@ ADD . /bigsi-aggregator/
 
 ENV PYTHONUNBUFFERED 1
 ENV PATH="/opt/venv/bin:$PATH"
-EXPOSE 8001
 
-CMD uwsgi --http :80 --harakiri 300  --buffer-size=65535 --protocol=http -w wsgi
+CMD uwsgi --http :80 --harakiri 300  --buffer-size=65535 -w wsgi
 
