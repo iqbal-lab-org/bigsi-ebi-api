@@ -10,5 +10,5 @@ spec:
       paths:
       - path: /
         backend:
-          serviceName: bigsi-aggregator
+          serviceName: bigsi-aggregator-api-service
           servicePort: 80

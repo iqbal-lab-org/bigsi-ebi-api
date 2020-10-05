@@ -5,6 +5,8 @@ from flask_restful import Api
 from bigsi_aggregator.extensions import celery
 from bigsi_aggregator.views import SequenceSearchListResource
 from bigsi_aggregator.views import SequenceSearchResource
+from bigsi_aggregator.views import VariantSearchListResource
+from bigsi_aggregator.views import VariantSearchResource
 from bigsi_aggregator.settings import REDIS_IP
 
 app = Flask(__name__)
@@ -15,6 +17,8 @@ api = Api(app)
 
 api.add_resource(SequenceSearchListResource, "/api/v1/searches/")
 api.add_resource(SequenceSearchResource, "/api/v1/searches/<sequence_search_id>")
+api.add_resource(VariantSearchListResource, "/api/v1/variant_searches/")
+api.add_resource(VariantSearchResource, "/api/v1/variant_searches/<variant_search_id>")
 
 
 app.config.update(

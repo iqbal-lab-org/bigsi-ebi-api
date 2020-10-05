@@ -20,4 +20,5 @@ ENV PYTHONUNBUFFERED 1
 ENV PATH="/opt/venv/bin:$PATH"
 EXPOSE 8001
 
-CMD uwsgi --harakiri 300  --buffer-size=65535  --socket 0.0.0.0:8001 --protocol=http -w wsgi
+CMD uwsgi --http :80 --harakiri 300  --buffer-size=65535 --protocol=http -w wsgi
+

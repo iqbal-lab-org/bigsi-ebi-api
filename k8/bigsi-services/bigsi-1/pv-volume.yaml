@@ -11,4 +11,4 @@ spec:
   accessModes:
     - ReadWriteOnce
   hostPath:
-    path: "/ssd0" ## Make sure this path exists on the local machine
+    path: "/data/bigsi" ## Make sure this path exists on the local machine

@@ -13,34 +13,40 @@ This API only provides read-only access to the `search` endpoint, creation and u
 
 Queries create a backgroud task which query all the BIGSIs in the array. The results are aggregated and cached in redis for 48 hours and are given a unique endpoint to lookup results. This URL can be polled to get the latests results. 
 
-### Create a BIGSI service for each of the INDEXes
-
-e.g.
+## Dev
 
 ```
-## BIGSI config
-kubectl create -f k8/bigsi-services/bigsi-1/bigsi-config.yaml
-kubectl create -f k8/bigsi-services/bigsi-1/env.yaml
+flask run
+
+curl -X POST  -H "Content-Type: application/json"  -d '{"seq":"CGGCGAGGAAGCGTTAAATCTCTTTCTGACG"}' localhost:5000/api/v1/searches/
+curl localhost:5000/api/v1/searches/7cddc4de43abdfab233a4a17
+
+
+curl -X POST  -H "Content-Type: application/json"  -d '{"reference":"/Users/phelimb/git/mykrobe-atlas-cli/src/mykrobe/data/NC_000962.3.fasta", "ref": "G", "pos":100, "alt":"T"}' localhost:5000/api/v1/variant_searches/
+
+curl localhost:5000/api/v1/variant_searches/ec36d0cc707093f4094197c0
+
+
+curl -X POST  -H "Content-Type: application/json"  -d '{"reference":"/Users/phelimb/git/mykrobe-atlas-cli/src/mykrobe/data/NC_000962.3.fasta", "ref": "S", "pos":450, "alt":"L", "genbank":"/Users/phelimb/git/mykrobe-atlas-cli/src/mykrobe/data/NC_000962.3.gb", "gene":"rpoB"}' localhost:5000/api/v1/variant_searches/
+
+curl localhost:5000/api/v1/variant_searches/4b49d251151b3ef23e88773f
+
+
+ ```
+### Create a BIGSI service for each of the INDEXes
+
+
+```
 ## Volume mounts
 kubectl create -f k8/bigsi-services/bigsi-1/pv-volume.yaml ## This needs to be updated to use a local path! 
 kubectl create -f k8/bigsi-services/bigsi-1/pv-claim.yaml
 ## BIGSI API services
-kubectl create -f k8/bigsi-services/bigsi-1/bigsi-service.yaml
 kubectl create -f k8/bigsi-services/bigsi-1/bigsi-deployment.yaml
-## You can test these are working by running 
 
+## You can test these are working by running 
 kubectl exec -it bigsi-1-deployment-f6c8c9c5-76nzt 
 curl localhost:8001/search?seq=CGGCGAGGAAGCGTTAAATCTCTTTCTGACG 
 ###(after installing curl if required)
-
-## nginx reverse proxy config + service (this is the where the bigsi-aggregator service will send requests)
-kubectl create configmap bigsi-1-nginx-configmap --from-file k8/bigsi-services/bigsi-1/nginx/nginx.conf
-kubectl create -f k8/bigsi-services/bigsi-1/nginx/nginx-service.yaml
-kubectl create -f k8/bigsi-services/bigsi-1/nginx/nginx-deployment.yaml
-
-## kubectl exec -it bigsi-1-nginx-deployment-7dd488b66c-52kkv
-## curl localhost/search?seq=CGGCGAGGAAGCGTTAAATCTCTTTCTGACG
-## (after installing curl if required)
 
 ```
 
@@ -70,29 +76,13 @@ metadata:
 Create the aggregator API service
 
 ```
-kubectl create -f k8/bigsi-aggregator-service/env.yaml
-kubectl create -f k8/bigsi-aggregator-service/bigsi-aggregator-service.yaml
 kubectl create -f k8/bigsi-aggregator-service/bigsi-aggregator-api-deployment.yaml
-kubectl create -f k8/bigsi-aggregator-service/bigsi-aggregator-worker-deployment.yaml
 
 ## Test it's working by running
-$ curl -X POST  -H "Content-Type: application/json"  -d '{"seq":"CGGCGAGGAAGCGTTAAATCTCTTTCTGACG"}' localhost:8001/api/v1/searches/
+$ curl -X POST  -H "Content-Type: application/json"  -d '{"seq":"CGGCGAGGAAGCGTTAAATCTCTTTCTGACG"}' localhost/api/v1/searches/
 {"id": "7cddc4de43abdfab233a4a17", "seq": "CGGCGAGGAAGCGTTAAATCTCTTTCTGACG", "threshold": 100, "score": false, "completed_bigsi_queries": 0, "total_bigsi_queries": 1, "results": [], "status": "INPROGRESS"}
-$ curl localhost:8001/api/v1/searches/7cddc4de43abdfab233a4a17
+$ curl localhost/api/v1/searches/7cddc4de43abdfab233a4a17
 {"id": "7cddc4de43abdfab233a4a17", "seq": "CGGCGAGGAAGCGTTAAATCTCTTTCTGACG", "threshold": 100, "score": false, "completed_bigsi_queries": 1, "total_bigsi_queries": 1, "results": [{"percent_kmers_found": 100, "num_kmers": "1", "num_kmers_found": "1", "sample_name": "s2", "score": null, "mismatches": null, "nident": null, "pident": null, "length": null, "evalue": null, "pvalue": null, "log_evalue": null, "log_pvalue": null, "kmer-presence": null}, {"percent_kmers_found": 100, "num_kmers": "1", "num_kmers_found": "1", "sample_name": "s1", "score": null, "mismatches": null, "nident": null, "pident": null, "length": null, "evalue": null, "pvalue": null, "log_evalue": null, "log_pvalue": null, "kmer-presence": null}], "status": "COMPLETE"}
-
-```
-
-Finally setup the nginx ingress
-
-```
-kubectl create configmap bigsi-aggregator-nginxconfigmap --from-file k8/bigsi-aggregator-service/nginx/nginx.conf
-kubectl create -f k8/bigsi-aggregator-service/nginx/nginx-service.yaml
-kubectl create -f k8/bigsi-aggregator-service/nginx/nginx-deployment.yaml
-
-$ kubectl exec -it bigsi-aggregator-nginx-deployment-799c6f5596-5mlcw /bin/bash
-root@bigsi-aggregator-nginx-deployment-799c6f5596-5mlcw:/# curl localhost/api/v1/searches/7cddc4de43abdfab233a4a17
-{"id": "7cddc4de43abdfab233a4a17", "seq": "CGGCGAGGAAGCGTTAAATCTCTTTCTGACG", "threshold": 100, "score": false, "completed_bigsi_queries": 2, "total_bigsi_queries": 1, "results": [{"percent_kmers_found": 100, "num_kmers": "1", "num_kmers_found": "1", "sample_name": "s2", "score": null, "mismatches": null, "nident": null, "pident": null, "length": null, "evalue": null, "pvalue": null, "log_evalue": null, "log_pvalue": null, "kmer-presence": null}, {"percent_kmers_found": 100, "num_kmers": "1", "num_kmers_found": "1", "sample_name": "s1", "score": null, "mismatches": null, "nident": null, "pident": null, "length": null, "evalue": null, "pvalue": null, "log_evalue": null, "log_pvalue": null, "kmer-presence": null}], "status": "COMPLETE"}
 
 ```
 
