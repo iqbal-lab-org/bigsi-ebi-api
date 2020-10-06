@@ -22,8 +22,8 @@ api.add_resource(VariantSearchResource, "/api/v1/variant_searches/<variant_searc
 
 
 app.config.update(
-    CELERY_BROKER_URL="redis://{redis_ip}:6379/1".format(redis_ip=REDIS_IP),
-    CELERY_RESULT_BACKEND="redis://{redis_ip}:6379/1".format(redis_ip=REDIS_IP),
+    CELERY_BROKER_URL="redis://{redis_ip}:6379".format(redis_ip=REDIS_IP),
+    CELERY_RESULT_BACKEND="redis://{redis_ip}:6379".format(redis_ip=REDIS_IP),
     CELERY_TRACK_STARTED=True,
     CELERY_SEND_EVENTS=True,
 )
