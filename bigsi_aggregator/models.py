@@ -13,7 +13,7 @@ r = redis.StrictRedis(REDIS_IP, decode_responses=True)
 bigsi_aggregator = BigsiAggregator(BIGSI_URLS)
 
 
-class BaseSearch:
+class BaseSearch(dict):
     def __init__(
         self,
         total_bigsi_queries=len(BIGSI_URLS),
