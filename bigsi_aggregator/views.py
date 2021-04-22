@@ -6,6 +6,7 @@ from flask_restful import reqparse
 
 from bigsi_aggregator.helpers import BigsiAggregator
 from bigsi_aggregator.models import SequenceSearch
+from bigsi_aggregator.settings import BIGSI_URLS
 
 logger = logging.getLogger(__name__)
 from bigsi_aggregator.models import VariantSearch
