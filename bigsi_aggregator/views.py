@@ -4,11 +4,15 @@ from flask_restful import Resource
 from flask_restful import fields, marshal_with, marshal
 from flask_restful import reqparse
 
+from bigsi_aggregator.helpers import BigsiAggregator
 from bigsi_aggregator.models import SequenceSearch
 
 logger = logging.getLogger(__name__)
 from bigsi_aggregator.models import VariantSearch
 from bigsi_aggregator import constants
+
+
+bigsi_aggregator = BigsiAggregator(BIGSI_URLS)
 
 seq_search_parser = reqparse.RequestParser()
 seq_search_parser.add_argument("seq", type=str, help="The sequence query")
@@ -59,6 +63,9 @@ class SequenceSearchListResource(Resource):
         logger.debug('args: %s', args)
 
         sequence_search = SequenceSearch.create(**args)
+        if sequence_search.status is "PENDING":
+            sequence_search.incr_request_queries()
+            bigsi_aggregator.search_and_aggregate(sequence_search)
         return marshal(sequence_search, sequence_search_fields), 201
 
 
@@ -117,6 +124,9 @@ class VariantSearchListResource(Resource):
             gene=args.gene,
             genbank=args.genbank,
         )
+        if variant_search.status is "PENDING":
+            variant_search.incr_request_queries()
+            bigsi_aggregator.variant_search_and_aggregate(variant_search)
         return marshal(variant_search, variant_search_fields), 201
 
 

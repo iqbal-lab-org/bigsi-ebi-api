@@ -1,6 +1,5 @@
 import redis
 import json
-from bigsi_aggregator.helpers import BigsiAggregator
 from bigsi_aggregator import constants
 from bigsi_aggregator.settings import BIGSI_URLS
 from bigsi_aggregator.settings import REDIS_IP
@@ -10,21 +9,21 @@ import hashlib
 DEFAULT_SEARCH_RESULTS_TTL = 48 * 60 * 60  # 2 days
 r = redis.StrictRedis(REDIS_IP, decode_responses=True)
 
-bigsi_aggregator = BigsiAggregator(BIGSI_URLS)
 
-
-class BaseSearch(dict):
+class BaseSearch:
     def __init__(
         self,
         total_bigsi_queries=len(BIGSI_URLS),
         results=[],
         completed_bigsi_queries=0,
+        requested_bigsi_queries=0,
         ttl=DEFAULT_SEARCH_RESULTS_TTL,
     ):
         self.total_bigsi_queries = total_bigsi_queries
         self._id = self.generate_id()
         self.ttl = ttl
         self.completed_bigsi_queries = completed_bigsi_queries
+        self.requested_bigsi_queries = requested_bigsi_queries
         self.results = results
         self.citation = "http://dx.doi.org/10.1038/s41587-018-0010-1"
 
@@ -55,10 +54,11 @@ class BaseSearch(dict):
 
     @property
     def status(self):
+        if self.requested_bigsi_queries == 0:
+            return "PENDING"
         if self.completed_bigsi_queries < self.total_bigsi_queries:
             return "INPROGRESS"
-        else:
-            return "COMPLETE"
+        return "COMPLETE"
 
     def set_ttl(self, ttl=DEFAULT_SEARCH_RESULTS_TTL):
         r.expire(self.search_results_key, ttl)
@@ -76,6 +76,9 @@ class BaseSearch(dict):
     def incr_completed_queries(self):
         r.hincrby(self.search_key, constants.COMPLETED_BIGSI_QUERIES_COUNT_KEY, 1)
 
+    def incr_request_queries(self):
+        r.hincrby(self.search_key, constants.REQUESTED_BIGSI_QUERIES_COUNT_KEY, 1)
+
 
 class SequenceSearch(BaseSearch):
     def __init__(
@@ -86,13 +89,14 @@ class SequenceSearch(BaseSearch):
         total_bigsi_queries=len(BIGSI_URLS),
         results=[],
         completed_bigsi_queries=0,
+        requested_bigsi_queries=0,
         ttl=DEFAULT_SEARCH_RESULTS_TTL,
     ):
         self.seq = seq
         self.threshold = threshold
         self.score = bool(int(score))
         super(SequenceSearch, self).__init__(
-            total_bigsi_queries, results, completed_bigsi_queries, ttl
+            total_bigsi_queries, results, completed_bigsi_queries, requested_bigsi_queries, ttl
         )
 
     @classmethod
@@ -111,7 +115,6 @@ class SequenceSearch(BaseSearch):
         else:
             sequence_search.create_cache()
             sequence_search.set_ttl()
-            bigsi_aggregator.search_and_aggregate(sequence_search)
         return sequence_search
 
     def __dict__(self):
@@ -120,6 +123,7 @@ class SequenceSearch(BaseSearch):
             constants.THRESHOLD_KEY: self.threshold,
             constants.SCORE_KEY: self.score,
             constants.COMPLETED_BIGSI_QUERIES_COUNT_KEY: self.completed_bigsi_queries,
+            constants.REQUESTED_BIGSI_QUERIES_COUNT_KEY: self.requested_bigsi_queries,
             constants.TOTAL_BIGSI_QUERIES_COUNT_KEY: self.total_bigsi_queries,
             constants.RESULTS_KEY: self.results,
         }
@@ -130,6 +134,7 @@ class SequenceSearch(BaseSearch):
         r.hset(search_params_key, constants.THRESHOLD_KEY, self.threshold)
         r.hset(search_params_key, constants.SCORE_KEY, int(self.score))
         r.hset(search_params_key, constants.COMPLETED_BIGSI_QUERIES_COUNT_KEY, 0)
+        r.hset(search_params_key, constants.REQUESTED_BIGSI_QUERIES_COUNT_KEY, 0)
         r.hset(
             search_params_key,
             constants.TOTAL_BIGSI_QUERIES_COUNT_KEY,
@@ -158,6 +163,7 @@ class VariantSearch(BaseSearch):
         genbank=None,
         results=[],
         completed_bigsi_queries=0,
+        requested_bigsi_queries=0,
         ttl=DEFAULT_SEARCH_RESULTS_TTL,
         total_bigsi_queries=len(BIGSI_URLS),
     ):
@@ -169,7 +175,7 @@ class VariantSearch(BaseSearch):
         self.gene = gene
         self.genbank = genbank
         super(VariantSearch, self).__init__(
-            total_bigsi_queries, results, completed_bigsi_queries, ttl
+            total_bigsi_queries, results, completed_bigsi_queries, requested_bigsi_queries, ttl
         )
 
     @classmethod
@@ -188,7 +194,6 @@ class VariantSearch(BaseSearch):
         else:
             variant_search.create_cache()
             variant_search.set_ttl()
-            bigsi_aggregator.variant_search_and_aggregate(variant_search)
         return variant_search
 
     @classmethod
@@ -208,6 +213,7 @@ class VariantSearch(BaseSearch):
             constants.GENBANK_KEY: self.genbank,
             constants.GENE_KEY: self.gene,
             constants.COMPLETED_BIGSI_QUERIES_COUNT_KEY: self.completed_bigsi_queries,
+            constants.REQUESTED_BIGSI_QUERIES_COUNT_KEY: self.requested_bigsi_queries,
             constants.TOTAL_BIGSI_QUERIES_COUNT_KEY: self.total_bigsi_queries,
             constants.RESULTS_KEY: self.results,
         }
@@ -229,6 +235,7 @@ class VariantSearch(BaseSearch):
         search_params_key = self.generate_search_key(self.id)
 
         r.hset(search_params_key, constants.COMPLETED_BIGSI_QUERIES_COUNT_KEY, 0)
+        r.hset(search_params_key, constants.REQUESTED_BIGSI_QUERIES_COUNT_KEY, 0)
         r.hset(
             search_params_key,
             constants.TOTAL_BIGSI_QUERIES_COUNT_KEY,
