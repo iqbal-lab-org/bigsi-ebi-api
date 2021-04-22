@@ -1,6 +1,8 @@
 import redis
 import json
+from bigsi_aggregator.helpers import BigsiAggregator
 from bigsi_aggregator import constants
+from bigsi_aggregator.settings import BIGSI_URLS
 from bigsi_aggregator.settings import REDIS_IP
 
 import hashlib
@@ -8,11 +10,12 @@ import hashlib
 DEFAULT_SEARCH_RESULTS_TTL = 48 * 60 * 60  # 2 days
 r = redis.StrictRedis(REDIS_IP, decode_responses=True)
 
+bigsi_aggregator = BigsiAggregator(BIGSI_URLS)
 
 class BaseSearch:
     def __init__(
         self,
-        total_bigsi_queries,
+        total_bigsi_queries=len(BIGSI_URLS),
         results=[],
         completed_bigsi_queries=0,
         ttl=DEFAULT_SEARCH_RESULTS_TTL,
@@ -64,7 +67,6 @@ class BaseSearch:
         return self.completed_bigsi_queries / self.total_bigsi_queries
 
     def add_results(self, results):
-        search_results_key = self.generate_search_results_key(self.id)
         for res in results:
             r.hset(self.search_results_key, res["sample_name"], json.dumps(res))
         self.incr_completed_queries()
@@ -80,7 +82,7 @@ class SequenceSearch(BaseSearch):
         seq,
         threshold,
         score,
-        total_bigsi_queries,
+        total_bigsi_queries=len(BIGSI_URLS),
         results=[],
         completed_bigsi_queries=0,
         ttl=DEFAULT_SEARCH_RESULTS_TTL,
@@ -101,13 +103,14 @@ class SequenceSearch(BaseSearch):
         return "sequence_search_results:%s" % _id
 
     @classmethod
-    def create(cls, seq, threshold, score, total_bigsi_queries):
+    def create(cls, seq, threshold, score, total_bigsi_queries=len(BIGSI_URLS)):
         sequence_search = cls(seq, threshold, score, total_bigsi_queries)
         if r.exists(cls.generate_search_key(sequence_search.id)):
             return cls.get_by_id(sequence_search.id)
         else:
             sequence_search.create_cache()
             sequence_search.set_ttl()
+            bigsi_aggregator.search_and_aggregate(sequence_search)
         return sequence_search
 
     def __dict__(self):
@@ -155,7 +158,7 @@ class VariantSearch(BaseSearch):
         results=[],
         completed_bigsi_queries=0,
         ttl=DEFAULT_SEARCH_RESULTS_TTL,
-        total_bigsi_queries=1,
+        total_bigsi_queries=len(BIGSI_URLS),
     ):
 
         self.reference = reference
@@ -169,7 +172,7 @@ class VariantSearch(BaseSearch):
         )
 
     @classmethod
-    def create(cls, reference, ref, pos, alt, gene, genbank, total_bigsi_queries):
+    def create(cls, reference, ref, pos, alt, gene, genbank, total_bigsi_queries=len(BIGSI_URLS)):
         variant_search = cls(
             reference=reference,
             ref=ref,
@@ -184,6 +187,7 @@ class VariantSearch(BaseSearch):
         else:
             variant_search.create_cache()
             variant_search.set_ttl()
+            bigsi_aggregator.variant_search_and_aggregate(variant_search)
         return variant_search
 
     @classmethod
