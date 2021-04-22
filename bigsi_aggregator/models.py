@@ -171,7 +171,13 @@ class VariantSearch(BaseSearch):
     @classmethod
     def create(cls, reference, ref, pos, alt, gene, genbank, total_bigsi_queries):
         variant_search = cls(
-            reference, ref, pos, alt, gene, genbank, total_bigsi_queries
+            reference=reference,
+            ref=ref,
+            pos=pos,
+            alt=alt,
+            gene=gene,
+            genbank=genbank,
+            total_bigsi_queries=total_bigsi_queries,
         )
         if r.exists(cls.generate_search_key(variant_search.id)):
             return cls.get_by_id(variant_search.id)
