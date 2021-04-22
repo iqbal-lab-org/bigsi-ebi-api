@@ -66,7 +66,7 @@ class SequenceSearchListResource(Resource):
         sequence_search = SequenceSearch.create(**args)
         if sequence_search.status is "PENDING":
             sequence_search.incr_request_queries()
-            bigsi_aggregator.search_and_aggregate(sequence_search)
+            bigsi_aggregator.search_and_aggregate(sequence_search.id)
         return marshal(sequence_search, sequence_search_fields), 201
 
 
@@ -127,7 +127,7 @@ class VariantSearchListResource(Resource):
         )
         if variant_search.status is "PENDING":
             variant_search.incr_request_queries()
-            bigsi_aggregator.variant_search_and_aggregate(variant_search)
+            bigsi_aggregator.variant_search_and_aggregate(variant_search.id)
         return marshal(variant_search, variant_search_fields), 201
 
 
