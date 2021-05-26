@@ -1,6 +1,7 @@
 import redis
 import json
 from bigsi_aggregator import constants
+from bigsi_aggregator.settings import BIGSI_URLS
 from bigsi_aggregator.settings import REDIS_IP
 
 import hashlib
@@ -12,15 +13,17 @@ r = redis.StrictRedis(REDIS_IP, decode_responses=True)
 class BaseSearch:
     def __init__(
         self,
-        total_bigsi_queries,
+        total_bigsi_queries=len(BIGSI_URLS),
         results=[],
         completed_bigsi_queries=0,
+        requested_bigsi_queries=0,
         ttl=DEFAULT_SEARCH_RESULTS_TTL,
     ):
         self.total_bigsi_queries = total_bigsi_queries
         self._id = self.generate_id()
         self.ttl = ttl
         self.completed_bigsi_queries = completed_bigsi_queries
+        self.requested_bigsi_queries = requested_bigsi_queries
         self.results = results
         self.citation = "http://dx.doi.org/10.1038/s41587-018-0010-1"
 
@@ -51,10 +54,11 @@ class BaseSearch:
 
     @property
     def status(self):
+        if self.requested_bigsi_queries == 0:
+            return "PENDING"
         if self.completed_bigsi_queries < self.total_bigsi_queries:
             return "INPROGRESS"
-        else:
-            return "COMPLETE"
+        return "COMPLETE"
 
     def set_ttl(self, ttl=DEFAULT_SEARCH_RESULTS_TTL):
         r.expire(self.search_results_key, ttl)
@@ -64,7 +68,6 @@ class BaseSearch:
         return self.completed_bigsi_queries / self.total_bigsi_queries
 
     def add_results(self, results):
-        search_results_key = self.generate_search_results_key(self.id)
         for res in results:
             r.hset(self.search_results_key, res["sample_name"], json.dumps(res))
         self.incr_completed_queries()
@@ -73,6 +76,9 @@ class BaseSearch:
     def incr_completed_queries(self):
         r.hincrby(self.search_key, constants.COMPLETED_BIGSI_QUERIES_COUNT_KEY, 1)
 
+    def incr_request_queries(self):
+        r.hincrby(self.search_key, constants.REQUESTED_BIGSI_QUERIES_COUNT_KEY, 1)
+
 
 class SequenceSearch(BaseSearch):
     def __init__(
@@ -80,16 +86,17 @@ class SequenceSearch(BaseSearch):
         seq,
         threshold,
         score,
-        total_bigsi_queries,
+        total_bigsi_queries=len(BIGSI_URLS),
         results=[],
         completed_bigsi_queries=0,
+        requested_bigsi_queries=0,
         ttl=DEFAULT_SEARCH_RESULTS_TTL,
     ):
         self.seq = seq
         self.threshold = threshold
         self.score = bool(int(score))
         super(SequenceSearch, self).__init__(
-            total_bigsi_queries, results, completed_bigsi_queries, ttl
+            total_bigsi_queries, results, completed_bigsi_queries, requested_bigsi_queries, ttl
         )
 
     @classmethod
@@ -101,7 +108,7 @@ class SequenceSearch(BaseSearch):
         return "sequence_search_results:%s" % _id
 
     @classmethod
-    def create(cls, seq, threshold, score, total_bigsi_queries):
+    def create(cls, seq, threshold, score, total_bigsi_queries=len(BIGSI_URLS)):
         sequence_search = cls(seq, threshold, score, total_bigsi_queries)
         if r.exists(cls.generate_search_key(sequence_search.id)):
             return cls.get_by_id(sequence_search.id)
@@ -116,6 +123,7 @@ class SequenceSearch(BaseSearch):
             constants.THRESHOLD_KEY: self.threshold,
             constants.SCORE_KEY: self.score,
             constants.COMPLETED_BIGSI_QUERIES_COUNT_KEY: self.completed_bigsi_queries,
+            constants.REQUESTED_BIGSI_QUERIES_COUNT_KEY: self.requested_bigsi_queries,
             constants.TOTAL_BIGSI_QUERIES_COUNT_KEY: self.total_bigsi_queries,
             constants.RESULTS_KEY: self.results,
         }
@@ -126,6 +134,7 @@ class SequenceSearch(BaseSearch):
         r.hset(search_params_key, constants.THRESHOLD_KEY, self.threshold)
         r.hset(search_params_key, constants.SCORE_KEY, int(self.score))
         r.hset(search_params_key, constants.COMPLETED_BIGSI_QUERIES_COUNT_KEY, 0)
+        r.hset(search_params_key, constants.REQUESTED_BIGSI_QUERIES_COUNT_KEY, 0)
         r.hset(
             search_params_key,
             constants.TOTAL_BIGSI_QUERIES_COUNT_KEY,
@@ -154,8 +163,9 @@ class VariantSearch(BaseSearch):
         genbank=None,
         results=[],
         completed_bigsi_queries=0,
+        requested_bigsi_queries=0,
         ttl=DEFAULT_SEARCH_RESULTS_TTL,
-        total_bigsi_queries=1,
+        total_bigsi_queries=len(BIGSI_URLS),
     ):
 
         self.reference = reference
@@ -165,13 +175,19 @@ class VariantSearch(BaseSearch):
         self.gene = gene
         self.genbank = genbank
         super(VariantSearch, self).__init__(
-            total_bigsi_queries, results, completed_bigsi_queries, ttl
+            total_bigsi_queries, results, completed_bigsi_queries, requested_bigsi_queries, ttl
         )
 
     @classmethod
-    def create(cls, reference, ref, pos, alt, gene, genbank, total_bigsi_queries):
+    def create(cls, reference, ref, pos, alt, gene, genbank, total_bigsi_queries=len(BIGSI_URLS)):
         variant_search = cls(
-            reference, ref, pos, alt, gene, genbank, total_bigsi_queries
+            reference=reference,
+            ref=ref,
+            pos=pos,
+            alt=alt,
+            gene=gene,
+            genbank=genbank,
+            total_bigsi_queries=total_bigsi_queries,
         )
         if r.exists(cls.generate_search_key(variant_search.id)):
             return cls.get_by_id(variant_search.id)
@@ -197,6 +213,7 @@ class VariantSearch(BaseSearch):
             constants.GENBANK_KEY: self.genbank,
             constants.GENE_KEY: self.gene,
             constants.COMPLETED_BIGSI_QUERIES_COUNT_KEY: self.completed_bigsi_queries,
+            constants.REQUESTED_BIGSI_QUERIES_COUNT_KEY: self.requested_bigsi_queries,
             constants.TOTAL_BIGSI_QUERIES_COUNT_KEY: self.total_bigsi_queries,
             constants.RESULTS_KEY: self.results,
         }
@@ -218,6 +235,7 @@ class VariantSearch(BaseSearch):
         search_params_key = self.generate_search_key(self.id)
 
         r.hset(search_params_key, constants.COMPLETED_BIGSI_QUERIES_COUNT_KEY, 0)
+        r.hset(search_params_key, constants.REQUESTED_BIGSI_QUERIES_COUNT_KEY, 0)
         r.hset(
             search_params_key,
             constants.TOTAL_BIGSI_QUERIES_COUNT_KEY,

@@ -4,7 +4,6 @@ from flask_restful import Resource
 from flask_restful import fields, marshal_with, marshal
 from flask_restful import reqparse
 
-from bigsi_aggregator import constants
 from bigsi_aggregator.helpers import BigsiAggregator
 from bigsi_aggregator.models import SequenceSearch
 from bigsi_aggregator.settings import BIGSI_URLS
@@ -12,6 +11,9 @@ from bigsi_aggregator.settings import BIGSI_URLS
 logger = logging.getLogger(__name__)
 from bigsi_aggregator.models import VariantSearch
 from bigsi_aggregator import constants
+
+
+bigsi_aggregator = BigsiAggregator(BIGSI_URLS)
 
 seq_search_parser = reqparse.RequestParser()
 seq_search_parser.add_argument("seq", type=str, help="The sequence query")
@@ -22,8 +24,6 @@ seq_search_parser.add_argument(
     "score", type=bool, help="Score the search results", default=False
 )
 
-
-bigsi_aggregator = BigsiAggregator(BIGSI_URLS)
 
 sequence_search_results_fields = {
     "sample_name": fields.String,
@@ -63,11 +63,10 @@ class SequenceSearchListResource(Resource):
         logger.info(self.post.__name__)
         logger.debug('args: %s', args)
 
-        sequence_search = SequenceSearch.create(
-            **args, total_bigsi_queries=len(BIGSI_URLS)
-        )
-        ## results are stored in the sequence search object
-        bigsi_aggregator.search_and_aggregate(sequence_search)
+        sequence_search = SequenceSearch.create(**args)
+        if sequence_search.status is "PENDING":
+            sequence_search.incr_request_queries()
+            bigsi_aggregator.search_and_aggregate(sequence_search.id)
         return marshal(sequence_search, sequence_search_fields), 201
 
 
@@ -125,10 +124,10 @@ class VariantSearchListResource(Resource):
             alt=args.alt,
             gene=args.gene,
             genbank=args.genbank,
-            total_bigsi_queries=len(BIGSI_URLS),
         )
-        ## results are stored in the sequence search object
-        bigsi_aggregator.variant_search_and_aggregate(variant_search)
+        if variant_search.status is "PENDING":
+            variant_search.incr_request_queries()
+            bigsi_aggregator.variant_search_and_aggregate(variant_search.id)
         return marshal(variant_search, variant_search_fields), 201
 
 
